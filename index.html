@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Máquina de Escrever Virtual</title>
+    <link href="https://fonts.googleapis.com/css2?family=Special+Elite&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        /* Define a fonte para o corpo e para o textarea */
+        body, textarea {
+            font-family: 'Special Elite', monospace;
+        }
+        /* Garante que o textarea não tenha a alça de redimensionamento padrão */
+        textarea {
+            resize: none;
+        }
+        /* Estilo para o cursor (opcional, pois o textarea já tem um) */
+        .typewriter-cursor {
+            display: inline-block;
+            width: 2px; /* Largura do cursor */
+            height: 1.2em; /* Altura do cursor, relativa ao tamanho da fonte */
+            background-color: #333; /* Cor do cursor */
+            animation: blink 1s step-start infinite;
+            margin-left: 1px;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-700 flex items-center justify-center min-h-screen p-4 selection:bg-sky-300 selection:text-sky-900">
+    <textarea 
+        id="typewriter-input"
+        class="w-full max-w-3xl h-[85vh] p-8 sm:p-10 md:p-12 bg-amber-50 text-gray-800 text-xl sm:text-2xl leading-relaxed shadow-2xl rounded-md border border-gray-300 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-300"
+        placeholder="Comece a digitar..."
+        aria-label="Área de digitação da máquina de escrever"
+        spellcheck="false"
+    ></textarea>
+
+    <script>
+        // Espera o DOM estar completamente carregado
+        document.addEventListener('DOMContentLoaded', () => {
+            const textarea = document.getElementById('typewriter-input');
+
+            if (!textarea) {
+                console.error("Elemento textarea não encontrado!");
+                return;
+            }
+
+            // Foca automaticamente no textarea ao carregar a página
+            textarea.focus();
+
+            // --- Configuração dos Sintetizadores de Som com Tone.js ---
+
+            // Som para o clique da tecla (configurado para ser mais metálico)
+            const keyClickSynth = new Tone.MetalSynth({
+                // A frequência será definida dinamicamente para cada clique
+                envelope: {
+                    attack: 0.0005, // Ataque muito curto para um clique rápido
+                    decay: 0.05,    // Decaimento curto
+                    sustain: 0,     // Sem sustentação para som percussivo
+                    release: 0.03   // Liberação rápida
+                },
+                harmonicity: 4.1,     // Controla a "metalicidade" do som
+                modulationIndex: 22,  // Afeta a complexidade do timbre
+                resonance: 3000,      // Contribui para um som mais agudo e "clacky"
+                octaves: 0.2,         // Menos oitavas para um som mais focado
+                volume: -18           // Volume ajustado para ser mais perceptível
+            }).toDestination();
+
+            // Som para o retorno do carro (tecla Enter)
+            // Usando NoiseSynth para um som de "arrasto" ou mecânico
+            const carriageReturnSynth = new Tone.NoiseSynth({
+                noise: {
+                    type: 'pink' // Tipo de ruído (white, pink, brown)
+                },
+                envelope: {
+                    attack: 0.005,
+                    decay: 0.15,
+                    sustain: 0,
+                    release: 0.1
+                },
+                filter: { // Adiciona um filtro para modelar o som
+                    type: 'bandpass', // Filtro passa-banda
+                    Q: 1.5,           // Fator de qualidade do filtro
+                    frequency: 700    // Frequência central do filtro
+                },
+                volume: -18 // Volume um pouco mais alto que o clique
+            }).toDestination();
+            
+            // Som para a tecla Backspace/Delete
+            const backspaceSynth = new Tone.MembraneSynth({ // Mantido como MembraneSynth para um som diferente
+                pitchDecay: 0.02,
+                octaves: 4,
+                oscillator: { type: 'triangle' },
+                envelope: {
+                    attack: 0.002,
+                    decay: 0.12,
+                    sustain: 0,
+                    release: 0.05
+                },
+                volume: -25
+            }).toDestination();
+
+
+            // --- Inicialização do Contexto de Áudio do Tone.js ---
+            // O áudio na web geralmente requer uma interação do usuário para iniciar.
+            const startAudioContext = async () => {
+                if (Tone.context.state !== 'running') {
+                    try {
+                        await Tone.start();
+                        console.log('Contexto de áudio do Tone.js iniciado com sucesso.');
+                    } catch (e) {
+                        console.error('Erro ao iniciar o contexto de áudio do Tone.js:', e);
+                    }
+                }
+            };
+
+            // Tenta iniciar o áudio na primeira interação (foco ou clique)
+            textarea.addEventListener('focus', startAudioContext, { once: true });
+            document.body.addEventListener('click', startAudioContext, { once: true });
+
+
+            // --- Lógica de Eventos de Teclado ---
+            const nonSoundKeys = [
+                "Control", "Shift", "Alt", "Meta", "CapsLock", "Escape", "Tab",
+                "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+                "Home", "End", "PageUp", "PageDown", "Insert",
+                "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+                "ScrollLock", "Pause", "PrintScreen", "NumLock"
+            ];
+
+            textarea.addEventListener('keydown', (event) => {
+                // Garante que o contexto de áudio está ativo antes de tocar sons
+                if (Tone.context.state !== 'running') {
+                    return;
+                }
+
+                const key = event.key;
+
+                if (key === 'Enter') {
+                    // Toca o som de retorno do carro
+                    carriageReturnSynth.triggerAttackRelease("8n", Tone.now());
+                } else if (key === 'Backspace' || key === 'Delete') {
+                    // Toca o som de backspace/delete
+                    backspaceSynth.triggerAttackRelease("G2", "32n", Tone.now()); // Nota e duração
+                } else if (!nonSoundKeys.includes(key) && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                    // Toca o som de clique de tecla para caracteres imprimíveis e espaço
+                    const baseFrequencies = [220, 250, 280, 310, 340, 190]; // Diferentes frequências base
+                    // Seleciona uma frequência aleatória da lista e adiciona uma pequena variação
+                    const randomBaseFreq = baseFrequencies[Math.floor(Math.random() * baseFrequencies.length)];
+                    const finalFreq = randomBaseFreq + (Math.random() - 0.5) * 30; // Variação de +/- 15Hz
+
+                    keyClickSynth.frequency.setValueAtTime(finalFreq, Tone.now());
+                    keyClickSynth.triggerAttackRelease("64n", Tone.now()); // "64n" é uma duração muito curta, para um clique rápido
+                }
+            });
+
+            // Adiciona uma mensagem de boas-vindas ou instrução se o textarea estiver vazio
+            if (textarea.value === "") {
+                // Não vamos usar placeholder fixo, pois o usuário pode apagar.
+                // A experiência é direta na "folha".
+            }
+        });
+    </script>
+</body>
+</html>
